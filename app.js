@@ -4,6 +4,7 @@ import session from 'express-session';
 import responseTime from 'response-time';
 import compress from 'compression';
 import errorHandler from 'errorhandler';
+import fs from 'fs';
 
 const app = express();
 const port = 3000;
@@ -114,6 +115,72 @@ app.get(
     res.send(`Editing article ${req.article.title}`);
   },
 );
+
+app.use((req, res, next) => {
+  const err = new Error('Page Not Found');
+  err.statusCode = 404;
+  // pass the error to the error handler
+  next(err);
+});
+
+const notFoundPage = fs
+  .readFileSync(`${__dirname}/404.html`)
+  .toString('utf8');
+const internalErrorPage = fs
+  .readFileSync(`${__dirname}/500.html`)
+  .toString('utf8');
+
+app.use((err, req, res, next) => {
+  // if not specified, the statusCode defaults to 500
+  // meaning it’s an internal error
+  err.statusCode = err.statusCode || 500;
+
+  switch (err.statusCode) {
+    case 500:
+      // when using Ajax we're usually expecting JSON, so in those situations
+      // it's good to be consistent and respond with JSON when errors occur:
+      if (req.xhr) {
+        return res
+          .status(err.statusCode)
+          .send({ error: '500 - Internal Server Error' });
+      }
+
+      res.format({
+        text() {
+          res
+            .status(500)
+            .send('500 - Internal Server Error');
+        },
+        html() {
+          res
+            .status(err.statusCode)
+            .send(internalErrorPage);
+        },
+        json() {
+          // $ curl -H "Accept: */json" http://localhost:7777/error
+          // {
+          //   "error": "500 - Internal Server Error"
+          // }
+          res
+            .status(err.statusCode)
+            .send({ error: '500 - Internal Server Error' });
+        },
+      });
+      // log the error to stderr
+      console.error(err.stack);
+      break;
+    case 404:
+      res.status(err.statusCode).send(notFoundPage);
+      break;
+    default:
+      console.error(
+        'Unhandled code',
+        err.statusCode,
+        err.stack,
+      );
+      res.status(err.statusCode).send('An error happened');
+  }
+});
 
 configure('development', () => {
   app.use(errorHandler());
