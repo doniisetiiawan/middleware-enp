@@ -1,11 +1,42 @@
 import express from 'express';
 import logger from 'morgan';
 import session from 'express-session';
+import responseTime from 'response-time';
+import compress from 'compression';
+import errorHandler from 'errorhandler';
 
 const app = express();
 const port = 3000;
 
-app.use(express.static('/public'));
+const configureByEnvironment = (env) => {
+  if (!env) {
+    env = process.env.NODE_ENV;
+  }
+
+  // default to development
+  env = env || 'development';
+
+  return (env2, callback) => {
+    if (env === env2) {
+      callback();
+    }
+  };
+};
+
+const configure = configureByEnvironment();
+
+configure('development', () => {
+  app.use(logger('dev'));
+  app.use(responseTime());
+  app.use(express.static(`${__dirname}/public`));
+});
+configure('production', () => {
+  app.use(logger());
+  // enable gzip compression for static resources in production
+  app.use(compress());
+  app.use(express.static(`${__dirname}/public`));
+});
+
 app.use(
   session({
     secret: 'strategic',
@@ -17,17 +48,6 @@ app.use(
   }),
 );
 app.use('/public', express.static(`${__dirname}/public`));
-// each time somebody visits the admin URL
-// log the ip address as well as other details
-app.use(
-  '/admin',
-  logger(
-    ':remote-addr - :remote-user [:date[clf]] ":method :url HTTP/:http-version" :status :res[content-length]',
-    {
-      immediate: true,
-    },
-  ),
-);
 app.use('/admin', (req, res, next) => {
   // we should authenticate the user somehow but for this demo
   // just set the 'isAdmin' flag directly
@@ -41,11 +61,26 @@ app.use('/admin', (req, res, next) => {
 //     res.send('Hello user!\n');
 //   }
 // });
-app.use((req, res, next) => {
-  res.send({
-    visited: new Date(),
-    url: req.url,
+
+app.get('/', (req, res, next) => {
+  res.send('Hello world');
+});
+app.get('/error', (req, res, next) => {
+  next(new Error('manually triggered error'));
+});
+
+configure('development', () => {
+  app.use(errorHandler());
+});
+configure('production', () => {
+  app.use((err, req, res, next) => {
+    res.status(500).send('500 - Internal Server Error');
+    console.error(err.stack);
   });
 });
 
 app.listen(port, () => console.log(`Example app listening on port ${port}!`));
+console.log(
+  'application environment: %s',
+  process.env.NODE_ENV || 'development',
+);
