@@ -33,13 +33,19 @@ app.use('/admin', (req, res, next) => {
   // just set the 'isAdmin' flag directly
   req.isAdmin = true;
 });
-app.use((req, res) => {
-  if (req.isAdmin) {
-    res.send('Hello admin!\n');
-  } else {
-    console.log('App process id (pid): %s', process.pid);
-    res.send('Hello user!\n');
-  }
+// app.use((req, res) => {
+//   if (req.isAdmin) {
+//     res.send('Hello admin!\n');
+//   } else {
+//     console.log('App process id (pid): %s', process.pid);
+//     res.send('Hello user!\n');
+//   }
+// });
+app.use((req, res, next) => {
+  res.send({
+    visited: new Date(),
+    url: req.url,
+  });
 });
 
 app.listen(port, () => console.log(`Example app listening on port ${port}!`));
